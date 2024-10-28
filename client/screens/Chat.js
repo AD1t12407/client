@@ -1,32 +1,27 @@
 import React, { useState } from 'react';
 import { View, Text, TextInput, FlatList, TouchableOpacity, StyleSheet } from 'react-native';
-import { OpenAI } from 'openai';
+import Groq from 'groq-sdk';
 
 const Chat = () => {
   const [messages, setMessages] = useState([]);
   const [inputText, setInputText] = useState('');
   const [loading, setLoading] = useState(false);
 
-  // OpenAI API client setup
-  const client = new OpenAI({
-    baseURL: "https://api-inference.huggingface.co/v1/", // Ensure this is the correct URL for your model
-    apiKey: "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", // Replace with your actual Hugging Face API key
+  // Initialize the Groq client with the API key
+  const groq = new Groq({
+    apiKey: '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'
   });
 
   const handleSend = async () => {
     if (inputText.trim()) {
-      // Add user message to chat
       const userMessage = { id: messages.length + 1, text: inputText, sender: 'user' };
       setMessages((prevMessages) => [...prevMessages, userMessage]);
       setInputText('');
-      setLoading(true); // Set loading to true while awaiting response
-
-      let out = "";
+      setLoading(true);
 
       try {
-        // Stream response from the OpenAI API
-        const stream = await client.chat.completions.create({
-          model: "microsoft/DialoGPT-medium", // Ensure this model is correct and available
+        // Send the user's message to the Groq model
+        const chatCompletion = await groq.chat.completions.create({
           messages: [
             {
               role: "system",
@@ -36,41 +31,24 @@ const Chat = () => {
               2. Offer encouragement and reassurance.
               3. Suggest mindfulness or relaxation techniques.
               4. Ask open-ended questions to encourage sharing.
-              5. Avoid giving medical advice; suggest they seek professional help if needed.
-              
-              ---\nUser Message: "${inputText}"\nResponse:`,
+              5. Avoid giving medical advice; suggest they seek professional help if needed.`
             },
             { role: "user", content: inputText },
           ],
-          max_tokens: 500,
-          stream: true,
+          model: "llama3-8b-8192",
+          temperature: 1,
+          max_tokens: 1024,
+          top_p: 1,
+          stream: false,
+          stop: null,
         });
 
-        // Iterate through the streamed response
-        for await (const chunk of stream) {
-          if (chunk.choices && chunk.choices.length > 0) {
-            const newContent = chunk.choices[0].delta.content;
-            out += newContent;
+        // Collect the response content
+        const responseContent = chatCompletion.choices[0].message.content;
 
-            // Update the bot message in real-time (optional)
-            const botMessage = {
-              id: messages.length + 2,
-              text: out, // Append response as it streams in
-              sender: 'bot',
-            };
-            setMessages((prevMessages) => [...prevMessages, botMessage]);
-          }
-        }
-
-        // Final bot message after streaming completes
-        if (out) {
-          const finalMessage = {
-            id: messages.length + 2,
-            text: out,
-            sender: 'bot',
-          };
-          setMessages((prevMessages) => [...prevMessages, finalMessage]);
-        }
+        // Create the bot message
+        const botMessage = { id: messages.length + 2, text: responseContent, sender: 'bot' };
+        setMessages((prevMessages) => [...prevMessages, botMessage]);
       } catch (error) {
         console.error('Error sending message:', error);
         const errorMessage = {
@@ -80,7 +58,7 @@ const Chat = () => {
         };
         setMessages((prevMessages) => [...prevMessages, errorMessage]);
       } finally {
-        setLoading(false); // Reset loading state
+        setLoading(false);
       }
     }
   };
